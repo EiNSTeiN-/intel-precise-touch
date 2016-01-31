@@ -1,0 +1,13 @@
+#!/usr/bin/env perl
+
+# https://www.kernel.org/doc/htmldocs/uio-howto/about.html
+# http://thiemonge.org/getting-started-with-uinput
+
+use strict;
+use warnings;
+
+use Sys::Mmap;
+
+
+
+exit 0;
