@@ -11,6 +11,20 @@ my @pci_table = (
 	[ "8086", "9d3e" ],	# Microsoft Surface Pro 4
 );
 
+# http://wiki.osdev.org/PCI#PCI_Device_Structure
+my %pci_cfg = (
+	ven	=> { adr => 0x00, len => 2 },
+	dev	=> { adr => 0x02, len => 2 },
+	sta	=> { adr => 0x06, len => 2 },
+	cmd	=> { adr => 0x04, len => 2 },
+	bar0	=> { adr => 0x10, len => 4 },
+	bar1	=> { adr => 0x14, len => 4 },
+	bar2	=> { adr => 0x18, len => 4 },
+	bar3	=> { adr => 0x1c, len => 4 },
+	bar4	=> { adr => 0x20, len => 4 },
+	bar5	=> { adr => 0x24, len => 4 },
+);
+
 open my $lspci, 'lspci -mm -D -n |'
 	or die "cannot run lspci: $!";
 
@@ -47,17 +61,45 @@ opendir my $pci, "/sys/devices/pci$part/$slot/uio";
 my $uioid = (grep { /^uio[0-9]+$/ } readdir $pci)[0];
 closedir $pci;
 
-open my $uio, "< /dev/$uioid"
+open my $uiofd, "< /dev/$uioid"
 	or die "cannot open uio: $!";
 
-open my $res, "+< /sys/class/uio/$uioid/device/resource0"
-	or die "cannot open res: $!";
-mmap my $mem, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $res
-	or die "mmap: $!";
+open my $cfgfd, "+< /sys/class/uio/$uioid/device/config"
+	or die "cannot open config: $!";
 
-while(my $nread = sysread $uio, my $buf, 4){
-	print "$nread\n";
-	print "$buf\n";
+open my $resfd, "+< /sys/class/uio/$uioid/device/resource0"
+	or die "cannot open resource0: $!";
+mmap my $res, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $resfd
+	or die "mmap resource0: $!";
+
+#while(my $nread = sysread $uiofd, my $buf, 4){
+#	print "$nread\n";
+#	print "$buf\n";
+#}
+
+# mmap() is not supported
+sub pci_read_config {
+	my ($key) = @_;
+
+	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
+
+	my $nread = sysread $cfgfd, my $buf, $pci_cfg{$key}{len};
+	return unless ($nread == $pci_cfg{$key}{len});
+
+	return ($pci_cfg{$key}{len} == 2)
+		? unpack "v", $buf
+		: unpack "V", $buf;
+}
+sub pci_write_config {
+	my ($key, $val) = @_;
+
+	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
+
+	my $buf = ($pci_cfg{$key}{len} == 2)
+		? pack "v", $val, $pci_cfg{$key}{len}
+		: pack "V", $val, $pci_cfg{$key}{len};
+
+	return syswrite($cfgfd, $buf, length($buf)) == length($buf) ;
 }
 
 exit 0;
