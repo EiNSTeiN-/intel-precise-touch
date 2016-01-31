@@ -29,7 +29,7 @@ Now install the dependencies:
 
 # Usage
 
-    sudo ./intel-precise-touch.pl
+    sudo ./intel-precise-touch
 
 # Development
 
