@@ -17,26 +17,32 @@ my %pci_cfg = (
 	dev	=> { adr => 0x02, len => 2 },
 	sta	=> { adr => 0x06, len => 2 },
 	cmd	=> { adr => 0x04, len => 2 },
+	csize	=> { adr => 0x0c, len => 1 },
+	lattim	=> { adr => 0x0d, len => 1 },
 	bar0	=> { adr => 0x10, len => 4 },
 	bar1	=> { adr => 0x14, len => 4 },
 	bar2	=> { adr => 0x18, len => 4 },
 	bar3	=> { adr => 0x1c, len => 4 },
 	bar4	=> { adr => 0x20, len => 4 },
 	bar5	=> { adr => 0x24, len => 4 },
+	rom	=> { adr => 0x30, len => 4 },
+	intlin	=> { adr => 0x3c, len => 1 },
+
+	un0	=> { adr => 0x8e, len => 2 },	# unknown
 );
 
 open my $lspci, 'lspci -mm -D -n |'
 	or die "cannot run lspci: $!";
 
 my ($slot, $ven, $dev);
-while(<$lspci>){
+while(<$lspci>) {
 	chomp;
 	my @line = split / /;
 
 	$line[2] =~ s/"//g;
 	$line[3] =~ s/"//g;
 
-	foreach my $t (@pci_table){
+	foreach my $t (@pci_table) {
 		next unless ($line[2] eq $t->[0] && $line[3] eq $t->[1]);
 
 		$slot = $line[0];
@@ -46,7 +52,7 @@ while(<$lspci>){
 	}
 }
 
-close($lspci);
+close $lspci;
 
 die 'unable to find supported PCI device'
 	unless defined $slot;
@@ -72,34 +78,106 @@ open my $resfd, "+< /sys/class/uio/$uioid/device/resource0"
 mmap my $res, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $resfd
 	or die "mmap resource0: $!";
 
-#while(my $nread = sysread $uiofd, my $buf, 4){
-#	print "$nread\n";
-#	print "$buf\n";
-#}
+precise_reset();
+precise_init();
+
+while(my $nread = sysread $uiofd, my $buf, 4) {
+	print "$nread\n";
+	print "$buf\n";
+}
 
 # mmap() is not supported
 sub pci_read_config {
 	my ($key) = @_;
+
+	die "unknown key: $key"
+		unless defined $pci_cfg{$key};
 
 	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
 
 	my $nread = sysread $cfgfd, my $buf, $pci_cfg{$key}{len};
 	return unless ($nread == $pci_cfg{$key}{len});
 
-	return ($pci_cfg{$key}{len} == 2)
-		? unpack "v", $buf
-		: unpack "V", $buf;
+	my $val;
+	if ($pci_cfg{$key}{len} == 1) {
+		$val = unpack "C", $buf;
+	} elsif ($pci_cfg{$key}{len} == 2) {
+		$val = unpack "v", $buf;
+	} elsif ($pci_cfg{$key}{len} == 4) {
+		$val = unpack "V", $buf;
+	} else {
+		die 'unknown pci_read_config length: ' . $pci_cfg{$key}{len};
+	}
+
+	return $val;
 }
 sub pci_write_config {
 	my ($key, $val) = @_;
 
+	die "unknown key: $key"
+		unless defined $pci_cfg{$key};
+
 	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
 
-	my $buf = ($pci_cfg{$key}{len} == 2)
-		? pack "v", $val, $pci_cfg{$key}{len}
-		: pack "V", $val, $pci_cfg{$key}{len};
-
+	my $buf;
+	if ($pci_cfg{$key}{len} == 1) {
+		$buf = pack "C", $val;
+	} elsif ($pci_cfg{$key}{len} == 2) {
+		$buf = pack "v", $val;
+	} elsif ($pci_cfg{$key}{len} == 4) {
+		$buf = pack "V", $val;
+	} else {
+		die 'unknown pci_write_config length: ' . $pci_cfg{$key}{len};
+	}
+	
 	return syswrite($cfgfd, $buf, length($buf)) == length($buf) ;
+}
+
+sub precise_init {
+	open my $barfd, "< /sys/class/uio/$uioid/device/resource"
+		or die "cannot open resource: $!";
+	my @bar = split / /, <$barfd>;
+	close $barfd;
+	pci_write_config('bar0', hex($bar[0]) + 4);
+
+	pci_write_config('bar1', 0);
+	pci_write_config('bar2', 0);
+	pci_write_config('bar3', 0);
+	pci_write_config('bar4', 0);
+	pci_write_config('bar5', 0);
+
+	pci_write_config('rom', 0);
+
+	open my $irqfd, "< /sys/class/uio/$uioid/device/irq"
+		or die "cannot open irq: $!";
+	my $irq = <$irqfd>;
+	close $irqfd;
+	chomp $irq;
+	$irq = int $irq;
+	pci_write_config('intlin', $irq);
+
+	pci_write_config('csize', 0);
+	pci_write_config('lattim', 0);
+
+	pci_write_config('cmd', 0x400)
+		while (pci_read_config('cmd') != 0x400);
+	pci_write_config('cmd', 0x406);
+
+	pci_write_config('sta', 0xf900);
+	pci_write_config('cmd', 0x406)
+		while (pci_read_config('cmd') != 0x406);
+
+	pci_write_config('un0', 0x80)
+		while (pci_read_config('un0') != 0x80);
+
+	pci_write_config('cmd', 0x6)
+		while (pci_read_config('cmd') != 0x6);
+
+}
+
+sub precise_reset {
+	pci_write_config('intlin', 255);
+	pci_write_config('cmd', 0);
 }
 
 exit 0;
