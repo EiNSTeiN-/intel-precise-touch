@@ -52,7 +52,12 @@ open my $uio, "< /dev/$uioid"
 
 open my $res, "+< /sys/class/uio/$uioid/device/resource0"
 	or die "cannot open res: $!";
-mmap my $mem, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, $res
+mmap my $mem, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $res
 	or die "mmap: $!";
+
+while(my $nread = sysread $uio, my $buf, 4){
+	print "$nread\n";
+	print "$buf\n";
+}
 
 exit 0;
