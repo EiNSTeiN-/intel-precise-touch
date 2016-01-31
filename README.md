@@ -52,12 +52,12 @@ We also require an EFI BIOS (VFIO seems to stall otherwise):
     cpio -id < payload.cpio
     cp usr/share/edk2.git/ovmf-x64/OVMF{,_VARS}-pure-efi.fd .
 
-
 Now install Windows 10 with:
 
-    sudo apt-get install qemu-system-x86 qemu-utils
-    qemu-img create -f qcow2 -o size=40G,lazy_refcounts=on 
+    sudo apt-get install qemu-system-x86 qemu-utils spice-client
+    qemu-img create -f qcow2 -o size=40G,lazy_refcounts=on mswin10.qcow2
     /usr/src/qemu/x86_64-softmmu/qemu-system-x86_64 \
+        -machine accel=kvm \
         -cpu host -smp 2 -m 2G \
         -drive if=pflash,format=raw,readonly,file=OVMF-pure-efi.fd \
         -drive if=pflash,format=raw,file=OVMF_VARS-pure-efi.fd \
@@ -68,14 +68,24 @@ Now install Windows 10 with:
         -soundhw hda \
         -rtc base=localtime \
         -drive file=Win10_1511_English_x64.iso,media=cdrom \
-        -drive file=/srv/bitbucket/downloads/virtio-win.iso,media=cdrom \
+        -drive file=virtio-win.iso,media=cdrom \
         -boot once=d
+
+You can access the VM with:
+
+    spicec -h 127.0.0.1 -p 5901
+
+I recommend you get all the regular disk, video, network and sound drivers working, optionally applying any Windows 10 updates, once done run:
+
+    qemu-img convert -c -p -O qcow2 mswin10.qcow2 mswin10.compressed.qcow2
+    mv mswin10.compressed.qcow2 mswin10.qcow2
+    qemu-img snapshot -c fresh mswin10.qcow2
+
+Now you have a snapshot point you can start from each time.
 
 ## Kernel
 
-You will require a kernel with `CONFIG_VFIO_PCI` and `CONFIG_INTEL_IOMMU` enabled (Debian and probably other distros already do).
-
-You may need to add `intel_iommu=on` to your kernel parameters list.
+You will require a kernel with `CONFIG_VFIO_PCI` and `CONFIG_INTEL_IOMMU` enabled (Debian and probably other distros already do), plus you will need to add `intel_iommu=on` to your kernel parameters list; rememebr to reboot.
 
 ## QEMU
 
@@ -115,6 +125,7 @@ Now you should have everything you need so you can spin up QEMU and look at the 
 
     cat /usr/src/qemu/trace-events | sed -n 's/^\(vfio_[^(]*\).*/\1/ p' > events
     sudo /usr/src/qemu/x86_64-softmmu/qemu-system-x86_64 \
+        -machine accel=kvm \
         -cpu host -smp 2 -m 2G \
         -drive if=pflash,format=raw,readonly,file=OVMF-pure-efi.fd \
         -drive if=pflash,format=raw,file=OVMF_VARS-pure-efi.fd \
@@ -125,11 +136,11 @@ Now you should have everything you need so you can spin up QEMU and look at the 
         -soundhw hda \
         -rtc base=localtime \
         -device vfio-pci,host=00:16.4,x-no-mmap=on \
-        -trace events=events 2> trace
+        -trace events=events 2>&1 | tee trace
 
 **N.B.** has to run with `sudo` so QEMU can directly access the PCI card
 
-You should have a file (you can `tail -F`) called `trace` showing accesses to the PCI card.
+You will need to go to Device Manager and search for drivers online for your new unknown PCI communications device; Windows 10 will then download the driver and set up the card.  If everything works, you should be able to touch the screen now and move the mouse around in the VM.
 
 Remember, if you want to run the userspace tool, you will first need to free up the PCI card with:
 
