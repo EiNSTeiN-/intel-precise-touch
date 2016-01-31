@@ -31,6 +31,10 @@ my %pci_cfg = (
 	un0	=> { adr => 0x8e, len => 2 },	# unknown
 );
 
+use constant FLAG_UN01	=>   0x2;
+use constant FLAG_UN02	=>   0x4;
+use constant FLAG_UN10	=> 0x400;
+
 open my $lspci, 'lspci -mm -D -n |'
 	or die "cannot run lspci: $!";
 
@@ -93,10 +97,15 @@ sub pci_read_config {
 	die "unknown key: $key"
 		unless defined $pci_cfg{$key};
 
+	printf STDERR "pci_read_config(\@0x%x [%s], len=0x%x) = ", $pci_cfg{$key}{adr}, $key, $pci_cfg{$key}{len};
+
 	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
 
 	my $nread = sysread $cfgfd, my $buf, $pci_cfg{$key}{len};
-	return unless ($nread == $pci_cfg{$key}{len});
+	unless ($nread == $pci_cfg{$key}{len}) {
+		print STDERR "FAILED\n";
+		return;
+	}
 
 	my $val;
 	if ($pci_cfg{$key}{len} == 1) {
@@ -106,8 +115,10 @@ sub pci_read_config {
 	} elsif ($pci_cfg{$key}{len} == 4) {
 		$val = unpack "V", $buf;
 	} else {
-		die 'unknown pci_read_config length: ' . $pci_cfg{$key}{len};
+		die 'unknown length: ' . $pci_cfg{$key}{len};
 	}
+
+	printf STDERR "0x%x\n", $val;
 
 	return $val;
 }
@@ -116,6 +127,8 @@ sub pci_write_config {
 
 	die "unknown key: $key"
 		unless defined $pci_cfg{$key};
+
+	printf STDERR "pci_write_config(\@0x%x [%s], val=0x%x, len=0x%x)\n", $pci_cfg{$key}{adr}, $key, $val, $pci_cfg{$key}{len};
 
 	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
 
@@ -127,7 +140,7 @@ sub pci_write_config {
 	} elsif ($pci_cfg{$key}{len} == 4) {
 		$buf = pack "V", $val;
 	} else {
-		die 'unknown pci_write_config length: ' . $pci_cfg{$key}{len};
+		die 'unknown length: ' . $pci_cfg{$key}{len};
 	}
 	
 	return syswrite($cfgfd, $buf, length($buf)) == length($buf) ;
@@ -159,20 +172,19 @@ sub precise_init {
 	pci_write_config('csize', 0);
 	pci_write_config('lattim', 0);
 
-	pci_write_config('cmd', 0x400)
-		while (pci_read_config('cmd') != 0x400);
-	pci_write_config('cmd', 0x406);
+	pci_write_config('cmd', FLAG_UN10)
+		while (pci_read_config('cmd') != FLAG_UN10);
+	pci_write_config('cmd', FLAG_UN10 | FLAG_UN02 | FLAG_UN01);
 
 	pci_write_config('sta', 0xf900);
-	pci_write_config('cmd', 0x406)
-		while (pci_read_config('cmd') != 0x406);
+	pci_write_config('cmd', FLAG_UN10 | FLAG_UN02 | FLAG_UN01)
+		while (pci_read_config('cmd') != (FLAG_UN10 | FLAG_UN02 | FLAG_UN01));
 
 	pci_write_config('un0', 0x80)
 		while (pci_read_config('un0') != 0x80);
 
-	pci_write_config('cmd', 0x6)
-		while (pci_read_config('cmd') != 0x6);
-
+	pci_write_config('cmd', FLAG_UN02 | FLAG_UN01)
+		while (pci_read_config('cmd') != (FLAG_UN02 | FLAG_UN01));
 }
 
 sub precise_reset {
