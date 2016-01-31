@@ -5,6 +5,54 @@ use warnings;
 
 use Sys::Mmap;
 
+use Data::Dumper;
 
+my @pci_table = (
+	[ "8086", "9d3e" ],	# Microsoft Surface Pro 4
+);
+
+open my $lspci, 'lspci -mm -D -n |'
+	or die "cannot run lspci: $!";
+
+my ($slot, $ven, $dev);
+while(<$lspci>){
+	chomp;
+	my @line = split / /;
+
+	$line[2] =~ s/"//g;
+	$line[3] =~ s/"//g;
+
+	foreach my $t (@pci_table){
+		next unless ($line[2] eq $t->[0] && $line[3] eq $t->[1]);
+
+		$slot = $line[0];
+		$ven = $line[2];
+		$dev = $line[3];
+		last;
+	}
+}
+
+close($lspci);
+
+die 'unable to find supported PCI device'
+	unless defined $slot;
+
+open my $uio_pci, '> /sys/bus/pci/drivers/uio_pci_generic/new_id'
+	or die "unable to open uio_pci_generic/new_id: $!";
+print $uio_pci "$ven $dev\n";
+close $uio_pci;
+
+my $part = substr $slot, 0, rindex($slot, ':');
+opendir my $pci, "/sys/devices/pci$part/$slot/uio";
+my $uioid = (grep { /^uio[0-9]+$/ } readdir $pci)[0];
+closedir $pci;
+
+open my $uio, "< /dev/$uioid"
+	or die "cannot open uio: $!";
+
+open my $res, "+< /sys/class/uio/$uioid/device/resource0"
+	or die "cannot open res: $!";
+mmap my $mem, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, $res
+	or die "mmap: $!";
 
 exit 0;
