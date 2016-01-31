@@ -12,7 +12,7 @@ my @pci_table = (
 );
 
 # http://wiki.osdev.org/PCI#PCI_Device_Structure
-my %pci_cfg = (
+my %cfg = (
 	ven	=> { adr => 0x00, len => 2 },
 	dev	=> { adr => 0x02, len => 2 },
 	sta	=> { adr => 0x06, len => 2 },
@@ -29,6 +29,14 @@ my %pci_cfg = (
 	intlin	=> { adr => 0x3c, len => 1 },
 
 	un0	=> { adr => 0x8e, len => 2 },	# unknown
+);
+
+my %reg = (
+	un0	=>  0x00,	# W
+	un1	=>  0x04,	# RW
+	un2	=>  0x08,	# R
+	un3	=>  0x0c,	# R
+	una	=> 0x800,	# RW
 );
 
 use constant FLAG_UN01	=>   0x2;
@@ -85,37 +93,46 @@ mmap my $res, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $resfd
 precise_reset();
 precise_init();
 
+region_read('un3'); # 0x80000009
+region_read('una', 0); # 0x4
+region_write('una', 0);
+while(region_read('una') != 0) {}
+region_read('un1'); # 0x80000008
+region_write('un1', 0x8000001f);
+
 while(my $nread = sysread $uiofd, my $buf, 4) {
 	print "$nread\n";
 	print "$buf\n";
 }
+
+exit 0;
 
 # mmap() is not supported
 sub pci_read_config {
 	my ($key) = @_;
 
 	die "unknown key: $key"
-		unless defined $pci_cfg{$key};
+		unless defined $cfg{$key};
 
-	printf STDERR "pci_read_config(\@0x%x [%s], len=0x%x) = ", $pci_cfg{$key}{adr}, $key, $pci_cfg{$key}{len};
+	printf STDERR "pci_read_config(\@0x%x [%s], len=0x%x) = ", $cfg{$key}{adr}, $key, $cfg{$key}{len};
 
-	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
+	seek $cfgfd, $cfg{$key}{adr}, 0;
 
-	my $nread = sysread $cfgfd, my $buf, $pci_cfg{$key}{len};
-	unless ($nread == $pci_cfg{$key}{len}) {
+	my $nread = sysread $cfgfd, my $buf, $cfg{$key}{len};
+	unless ($nread == $cfg{$key}{len}) {
 		print STDERR "FAILED\n";
 		return;
 	}
 
 	my $val;
-	if ($pci_cfg{$key}{len} == 1) {
+	if ($cfg{$key}{len} == 1) {
 		$val = unpack "C", $buf;
-	} elsif ($pci_cfg{$key}{len} == 2) {
+	} elsif ($cfg{$key}{len} == 2) {
 		$val = unpack "v", $buf;
-	} elsif ($pci_cfg{$key}{len} == 4) {
+	} elsif ($cfg{$key}{len} == 4) {
 		$val = unpack "V", $buf;
 	} else {
-		die 'unknown length: ' . $pci_cfg{$key}{len};
+		die 'unknown length: ' . $cfg{$key}{len};
 	}
 
 	printf STDERR "0x%x\n", $val;
@@ -126,24 +143,47 @@ sub pci_write_config {
 	my ($key, $val) = @_;
 
 	die "unknown key: $key"
-		unless defined $pci_cfg{$key};
+		unless defined $cfg{$key};
 
-	printf STDERR "pci_write_config(\@0x%x [%s], val=0x%x, len=0x%x)\n", $pci_cfg{$key}{adr}, $key, $val, $pci_cfg{$key}{len};
+	printf STDERR "pci_write_config(\@0x%x [%s], val=0x%x, len=0x%x)\n", $cfg{$key}{adr}, $key, $val, $cfg{$key}{len};
 
-	seek $cfgfd, $pci_cfg{$key}{adr}, 0;
+	seek $cfgfd, $cfg{$key}{adr}, 0;
 
 	my $buf;
-	if ($pci_cfg{$key}{len} == 1) {
+	if ($cfg{$key}{len} == 1) {
 		$buf = pack "C", $val;
-	} elsif ($pci_cfg{$key}{len} == 2) {
+	} elsif ($cfg{$key}{len} == 2) {
 		$buf = pack "v", $val;
-	} elsif ($pci_cfg{$key}{len} == 4) {
+	} elsif ($cfg{$key}{len} == 4) {
 		$buf = pack "V", $val;
 	} else {
-		die 'unknown length: ' . $pci_cfg{$key}{len};
+		die 'unknown length: ' . $cfg{$key}{len};
 	}
 	
-	return syswrite($cfgfd, $buf, length($buf)) == length($buf) ;
+	syswrite($cfgfd, $buf, length($buf)) == length($buf) ;
+}
+
+sub region_read {
+	my ($key) = @_;
+
+	die "unknown key: $key"
+		unless defined $reg{$key};
+
+	my $val = unpack "V", substr($res, $reg{$key}, 4);
+
+	printf STDERR "region_read(\@0x%x [%s]) = 0x%x\n", $reg{$key}, $key, $val;
+
+	return $val;
+}
+sub region_write {
+	my ($key, $val) = @_;
+
+	die "unknown key: $key"
+		unless defined $reg{$key};
+
+	printf STDERR "region_read(\@0x%x [%s], val=0x%x)\n", $reg{$key}, $key, $val;
+
+	substr($res, $reg{$key}, 4) = pack "V", $val;
 }
 
 sub precise_init {
