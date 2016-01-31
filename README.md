@@ -29,6 +29,16 @@ Now install the dependencies:
 
 # Usage
 
+Set things up ready for the driver:
+
+    sudo modprobe uinput
+    sudo modprobe uio_pci_generic
+    echo 8086 9d3e | sudo tee /sys/bus/pci/drivers/uio_pci_generic/new_id >/dev/null
+
+Before we start the driver, check that the output of `lspci -k -d 8086:9d3e` shows the kernel driver in use is `uio_pci_generic`.
+
+Now we can run the userspace driver with:
+
     sudo ./intel-precise-touch
 
 # Development
