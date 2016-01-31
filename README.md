@@ -10,7 +10,7 @@ A userspace implementation of a PCI driver for the Intel Precise Touch; as found
 
 # Preflight
 
-These instructions assume you are using Debian `jessie` 8.x, but may work with other distrubutions too.
+These instructions assume you are using Debian `jessie` 8.x, but may work with other distributions too.
 
 You will require a kernel (Debian and probably other distros already do) with the following modules enabled:
 
@@ -33,7 +33,7 @@ Now install the dependencies:
 
 # Development
 
-To try and work out how the Microsoft Windows driver works, we tie the PCI card directly to a Win10 QEMU VM and record the requests that pass through, from there we stratch our heads and try to work out what means what and where.
+To try and work out how the Microsoft Windows driver works, we tie the PCI card directly to a Win10 QEMU VM and record the requests that pass through, from there we stretch our heads and try to work out what means what and where.
 
 Thanks go out to Olivier Fauchon for noting down the setting up of QEMU sparing me from having to do so.
 
@@ -85,7 +85,7 @@ Now you have a snapshot point you can start from each time.
 
 ## Kernel
 
-You will require a kernel with `CONFIG_VFIO_PCI` and `CONFIG_INTEL_IOMMU` enabled (Debian and probably other distros already do), plus you will need to add `intel_iommu=on` to your kernel parameters list; rememebr to reboot.
+You will require a kernel with `CONFIG_VFIO_PCI` and `CONFIG_INTEL_IOMMU` enabled (Debian and probably other distros already do), plus you will need to add `intel_iommu=on` to your kernel parameters list; remember to reboot.
 
 ## QEMU
 
