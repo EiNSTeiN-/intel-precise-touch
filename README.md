@@ -7,6 +7,7 @@ A userspace implementation of a PCI driver for the Intel Precise Touch; as found
  * [Reverse engineering Windows or Linux PCI drivers with Intel VT-d and QEMU](https://hakzsam.wordpress.com/2015/02/21/471/)
  * [The Userspace I/O HOWTO](https://www.kernel.org/doc/htmldocs/uio-howto/index.html)
  * [Getting started with uinput: the user level input subsystem](http://thiemonge.org/getting-started-with-uinput)
+ * [UEXS002 — Fluid and Flowing Natural Writing with Intel® Precise Touch Technology](http://myeventagenda.com/sessions/0B9F4191-1C29-408A-8B61-65D7520025A8/7/5)
 
 # Preflight
 
