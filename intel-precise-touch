@@ -187,7 +187,7 @@ sub region_write {
 	die "unknown key: $key"
 		unless defined $reg{$key};
 
-	printf STDERR "region_read(\@0x%x [%s], val=0x%x)\n", $reg{$key}, $key, $val;
+	printf STDERR "region_write(\@0x%x [%s], val=0x%x)\n", $reg{$key}, $key, $val;
 
 	substr($res, $reg{$key}, 4) = pack "V", $val;
 }
