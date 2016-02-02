@@ -34,9 +34,15 @@ my %cfg = (
 );
 
 # linux:include/uapi/linux/pci_regs.h
-use constant PCI_COMMAND_MEMORY		=>   0x2;
-use constant PCI_COMMAND_MASTER		=>   0x4;
-use constant PCI_COMMAND_INTX_DISABLE	=> 0x400;
+use constant PCI_COMMAND_MEMORY			=>    0x2;
+use constant PCI_COMMAND_MASTER			=>    0x4;
+use constant PCI_COMMAND_INTX_DISABLE		=>  0x400;
+use constant PCI_STATUS_PARITY			=>  0x100;
+use constant PCI_STATUS_SIG_TARGET_ABORT	=>  0x800;
+use constant PCI_STATUS_REC_TARGET_ABORT	=> 0x1000;
+use constant PCI_STATUS_REC_MASTER_ABORT	=> 0x2000;
+use constant PCI_STATUS_SIG_SYSTEM_ERROR	=> 0x4000;
+use constant PCI_STATUS_DETECTED_PARITY		=> 0x8000;
 
 my %reg = (
 	un0	=>  0x00,	# W
@@ -93,19 +99,12 @@ open my $resfd, "+< /sys/class/uio/$uioid/device/resource0"
 mmap my $res, 0, PROT_READ|PROT_WRITE, MAP_SHARED, $resfd
 	or die "mmap resource0: $!";
 
-my $vbuf = mmap my $buf, 4096*4096, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS|MAP_LOCKED, STDOUT
-	or die "mmap buffer: $!";
-
-my $pbuf = virt_to_phys($vbuf);
-
 precise_reset();
-precise_init($pbuf);
+precise_init();
 
 region_read('una');
 
 exit 0;
-
-region_write('una', 0x80000000);
 
 while(my $nread = sysread $uiofd, my $buf, 4) {
 	print "$nread\n";
@@ -113,30 +112,6 @@ while(my $nread = sysread $uiofd, my $buf, 4) {
 }
 
 exit 0;
-
-# http://log.or.cz/?p=89
-sub virt_to_phys {
-	my ($vaddr) = @_;
-
-	open my $fd, "< /proc/self/pagemap"
-		or die "cannot open pagemap: $!";
-
-	my $pagesize = POSIX::sysconf(&POSIX::_SC_PAGESIZE);
-
-	sysseek $fd, $vaddr / $pagesize * 8, 0
-		or die "unable to seek pagemap: $!";
-
-	sysread $fd, my $buf, 8
-		or die "unable to read pagemap: $!";
-
-	close $fd;
-
-	my $n = unpack "Q", $buf;
-
-	my $pfn = $n & ((1 << 55) - 1);
-
-	return $pfn * $pagesize;
-}
 
 # mmap() is not supported
 sub pci_read_config {
@@ -218,13 +193,12 @@ sub region_write {
 }
 
 sub precise_init {
-	my ($pbuf) = @_;
-
 	open my $barfd, "< /sys/class/uio/$uioid/device/resource"
 		or die "cannot open resource: $!";
 	my @bar = split / /, <$barfd>;
 	close $barfd;
-	pci_write_config('bar0', $pbuf);	# device sets (x & 0xfffff000) | 0x4
+	pci_write_config('bar0', hex($bar[0]));	# device sets (x & 0xfffff000) | 0x4
+
 	pci_write_config('bar1', 0);
 	pci_write_config('bar2', 0);
 	pci_write_config('bar3', 0);
@@ -244,16 +218,22 @@ sub precise_init {
 	pci_write_config('csize', 0);
 	pci_write_config('lattim', 0);
 
-	pci_write_config('cmd', PCI_COMMAND_INTX_DISABLE);
-	pci_write_config('cmd', PCI_COMMAND_INTX_DISABLE | PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY);
+	pci_write_config('cmd', PCI_COMMAND_INTX_DISABLE
+				| PCI_COMMAND_MASTER
+				| PCI_COMMAND_MEMORY);
 
-	pci_write_config('sta', 0xf900);
-	pci_write_config('cmd', PCI_COMMAND_INTX_DISABLE | PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY);
+	pci_write_config('sta', PCI_STATUS_PARITY
+				| PCI_STATUS_SIG_TARGET_ABORT
+				| PCI_STATUS_REC_TARGET_ABORT
+				| PCI_STATUS_REC_MASTER_ABORT
+				| PCI_STATUS_SIG_SYSTEM_ERROR
+				| PCI_STATUS_DETECTED_PARITY);
 
 	pci_write_config('un0', 0x80)
 		while (pci_read_config('un0') != 0x80);
 
-	pci_write_config('cmd', PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY)
+	pci_write_config('cmd', PCI_COMMAND_MASTER
+				| PCI_COMMAND_MEMORY)
 }
 
 sub precise_reset {
