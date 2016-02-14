@@ -1,0 +1,34 @@
+A second C userspace implementation of a PCI driver for the Intel Precise Touch; as found in the Microsoft Surface Pro 4.
+**N.B.** this is currently not usable and in the reverse engineering stage
+
+Olivier Fauchon
+Alexander Clouter
+
+
+Status: 
+
+- Initialisation of PCI device  0000:16.4 done (based on KVM-vfio captures)
+- Enable interrupts (Seems to work....)
+- Reading region0 memory map (Should work) 
+- Decode the intel precise protocole (The hard part, NOT DONE) 
+
+Files: 
+
+- Makefile  
+- init_modules => Bash script to load uio modules and bind the device 
+- precise-uio.c => The driver
+- vfio.c => Another C attempt (nevermind)
+- logs/vm-precise-capture.log
+- logs/log_parser.pl
+
+
+How to run: 
+
+$ su - 
+# ./init_modules
+# ./precise-uio
+
+How to decode logs
+
+# cd logs
+# cat kvm-precise-capture.log | ./log_parser.pl

@@ -1,0 +1,37 @@
+#!/bin/bash
+
+
+if [ "$UID" != "0" ]; then
+	echo "Please run the script as root"
+	exit 1
+fi
+
+modprobe -r  vfio-pci 
+modprobe -r vfio_iommu_type1
+modprobe -r vfio
+modprobe uio_pci_generic
+
+dev="0000:00:16.4"
+echo -n "8086 9d3e" >  /sys/bus/pci/drivers/uio_pci_generic/new_id
+
+if [ -d "/sys/bus/pci/devices/${dev}" ]; then 
+	drv=$(lspci  -k -s16.4 | grep driver | sed  's/.*driver in use: \(.*\)/\1/')
+	echo "*** DEVICE ${dev} bind with driver ${drv}"
+
+	if [ "${drv}" != "uio_pci_generic" ]; then 
+		echo "Unbinding driver ${drv}/device 00:16.4"
+		echo -n "0000:00:16.4" > /sys/bus/pci/drivers/${drv}/unbind
+		echo "Rebinding driver uio_pci_generic/device 00:16.4"
+		echo -n "0000:00:16.4" > /sys/bus/pci/drivers/uio_pci_generic/bind
+	else 
+		echo "OK ! Ready to go"
+		exit 1
+	fi
+else 
+	echo "Can't find Intel Precise device ${dev}"
+	exit 1
+fi
+
+#lspci -vvvvvk -s16.4
+
+
