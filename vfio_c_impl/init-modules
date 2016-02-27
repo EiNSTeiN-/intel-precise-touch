@@ -1,0 +1,9 @@
+#!/bin/bash
+
+sudo echo "Configuring VFIO"
+
+modprobe -r vfio-pci 
+modprobe -r uio_pci_generic
+modprobe -r mei_me
+modprobe -r pci_stub
+modprobe vfio-pci ids=8086:9d3a,8086:9d3e
