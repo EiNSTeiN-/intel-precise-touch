@@ -27,6 +27,7 @@
 #include <linux/ratelimit.h>
 
 #define MSSP4TOUCH_DEV_NAME "mssp4touch"
+#define MSSP4TOUCH_IRQ_ID "mssp4touch_irq_id"
 /* ============================================================
  *                         PCI SPECIFIC 
  * ============================================================ */
@@ -48,7 +49,6 @@ static struct pci_device_id mssp4touch_id_table[] = {
 
 MODULE_DEVICE_TABLE (pci, mssp4touch_id_table);
 
-#define MSSP4TOUCH_IRQ_ID "mssp4touch_irq_id"
 
 /*  relevant control register offsets */
 enum {
@@ -73,16 +73,17 @@ static irqreturn_t mssp4touch_interrupt (int irq, void *dev_id)
 
 
 
-	pr_info_ratelimited("@0: 0x%04X @4: 0x%04X @8: 0x%04X @c: 0x%04X @800: 0x%04X ",
+	pr_info_ratelimited("int_status:0x%04x addr+0:0x%08x addr+0x4:0x%08x addr+0x08:0x%08x addr+0xc:0x%08x addr+0x800:0x%08x ",
+		status,
 		readl(mssp4touch_dev.regs_base_addr + 0x000),
 		readl(mssp4touch_dev.regs_base_addr + 0x004),
 		readl(mssp4touch_dev.regs_base_addr + 0x008),
 		readl(mssp4touch_dev.regs_base_addr + 0x00c),
 		readl(mssp4touch_dev.regs_base_addr + 0x800));
 
+	//writel(0x0, mssp4touch_dev.regs_base_addr + 0x800); 
 
 
-        pr_info_ratelimited("interrupt (status = 0x%04x)\n", status);
         return IRQ_HANDLED;
 }
 
@@ -114,13 +115,12 @@ static int mssp4touch_probe(struct pci_dev *pdev,
         /* bar0: control registers */
         mssp4touch_dev.regs_start =  pci_resource_start(pdev, 0);
         mssp4touch_dev.regs_len = pci_resource_len(pdev, 0);
-//        mssp4touch_dev.regs_base_addr = pci_iomap(pdev, 0, 0x100);
         mssp4touch_dev.regs_base_addr = pci_iomap(pdev, 0, 0x0); //0x0 to access to full bar
 
         if (!mssp4touch_dev.regs_base_addr) {
                 dev_err(dev, "cannot ioremap registers of size %lu\n",
                              (unsigned long)mssp4touch_dev.regs_len);
-                goto reg_release;
+                goto pci_release;
         }
 
         /* interrupts: set all masks */
@@ -134,17 +134,17 @@ static int mssp4touch_probe(struct pci_dev *pdev,
         dev_info(dev, "regs_addr_start = 0x%lx regs_len = %lu\n",
                         (unsigned long)mssp4touch_dev.regs_start, 
                         (unsigned long)mssp4touch_dev.regs_len);
-
         return 0;
 
-reg_release:
-        //pci_iounmap(pdev, mssp4touch_dev.data_base_addr);
 pci_release:
         pci_release_regions(pdev);
 pci_disable:
         pci_disable_device(pdev);
         return -EBUSY;
 }
+
+
+
 
 static void mssp4touch_remove(struct pci_dev* pdev)
 {
